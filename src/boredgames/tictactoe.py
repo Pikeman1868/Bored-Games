@@ -1,20 +1,60 @@
 from __future__ import annotations
-from typing import Protocol
 from dataclasses import dataclass
 from itertools import cycle
 from abc import ABC, abstractmethod
 
-class Presenter(Protocol):
+class GameError(Exception):
+    pass
+
+class AlreadyOccupiedError(GameError):
+    pass
+
+class GameOverError(GameError):
+    pass
+
+class Presenter(ABC):
     def winner(self, player:str) -> None:
-        ...
+        raise NotImplementedError()
 
     def move_made(self, move:Move) -> None:
-        ...
+        raise NotImplementedError()
+    
+    def error(self, error:str) -> None:
+        raise NotImplementedError()
+
+    def game_over(self) -> None:
+        raise NotImplementedError()
 
 class TicTacToe:
+    class GameState(ABC):
+        @abstractmethod
+        def move(self, context:TicTacToe, move:Move) -> None:
+            raise NotImplementedError()
+        @abstractmethod
+        def state(self) -> str:
+            raise NotImplementedError()
+
+    class GameOverState(GameState):
+        def move(self, context: TicTacToe, move: Move) -> None:
+            raise GameOverError("Game is over.")
+
+        def state(self) -> str:
+            return "Game Over!"
+
+    class GameInProgressState(GameState):
+        def move(self, context: TicTacToe, move: Move) -> None:
+            context.board.make_move(move)
+
+        def state(self) -> str:
+            return "In Progress!"
+
+    GAME_OVER = GameOverState()
+    GAME_IN_PROGRESS = GameInProgressState()
+
     def __init__(self, presenter:Presenter):
-        self._presenter = presenter
-        self._board = Board()
+        self._presenter:Presenter = presenter
+        self._board:Board = Board()
+        self._state:TicTacToe.GameState = self.GAME_IN_PROGRESS
 
         players = (Player('X'), Player('O'))
         self.players = cycle(players)
@@ -32,19 +72,31 @@ class TicTacToe:
     def board(self) -> Board:
         return self._board
 
+    @property
+    def state(self) -> str:
+        return self._state.state()
+
     def move(self, row:int, col:int):
-        move = Move(self.current_player)
-        self.board.at(row, col).occupy(move)
-        self._presenter.move_made(move)
-        self._next_player()
+        move = Move(self.current_player, row, col)
+        try:
+            self._state.move(self, move)
+            self._presenter.move_made(move)
+            self._next_player()
+        except GameError as e:
+            self._presenter.error(e)
+
+    def end_game(self) -> None:
+        self._state = self.GAME_OVER
+        self._presenter.game_over()
 
     def _next_player(self):
         self.current_player = next(self.players)
-        
 
 @dataclass
 class Move:
     player:Player
+    row:int
+    col:int
 
 @dataclass
 class Player:
@@ -70,7 +122,7 @@ class Cell:
         def is_occupied(self) -> bool:
             return True
         def occupy(self, context: Cell, move: Move) -> None:
-            pass
+            raise AlreadyOccupiedError(f"{context.__str__()} already occupied!")
 
     EMPTY = EmptyState()
     OCCUPIED = OccupiedState()
@@ -94,8 +146,15 @@ class Cell:
     def col(self) -> int:
         return self._col
 
+    @property
+    def marker(self) -> str:
+        return 'X'
+
     def occupy(self, move:Move) -> None:
         self._current_state.occupy(self, move)
+
+    def __str__(self) -> str:
+        return f"Cell({self.row},{self.col})"
 
 class Board:
     def __init__(self) -> None:
@@ -116,3 +175,6 @@ class Board:
 
     def at(self, row:int, col:int) -> Cell:
         return self._cells[row][col]
+
+    def make_move(self, move:Move) -> None:
+        self.at(move.row, move.col).occupy(move)

@@ -9,6 +9,12 @@ class SpyPresenter(Presenter):
     def move_made(self, move:Move) -> None:
         self.the_move_made = move
 
+    def error(self, error:str) -> None:
+        self.the_error = error
+    
+    def game_over(self) -> None:
+        self.is_game_over = True
+
 @dataclass
 class GameTuple():
     game:TicTacToe
@@ -32,7 +38,7 @@ class TestAcceptance():
         game.move(2,1)
         game.move(0,2)
         assert presenter.the_winner == winner
-    
+
 class TestGame:
     
     def test_move_plays_for_current_player(self, game_tuple:GameTuple):
@@ -55,6 +61,33 @@ class TestGame:
         cell:Cell = game.board.at(0, 0)
         assert cell.is_occupied
 
+    def test_cant_make_move_on_occupied_cell(self, game_tuple:GameTuple):
+        game = game_tuple.game
+        presenter = game_tuple.presenter
+        game.move(0,0)
+        game.move(0,0)
+        assert presenter.the_error != None
+
+    def test_failed_moves_remains_on_current_player(self, game_tuple:GameTuple):
+        game = game_tuple.game
+        game.move(0,0)
+        player = game.current_player
+        game.move(0,0)
+        assert player == game.current_player
+
+    def test_end_game_sets_state_to_game_over(self, game_tuple:GameTuple):
+        game = game_tuple.game
+        game.end_game()
+        assert game.state == TicTacToe.GAME_OVER.state() 
+
+    def test_cant_make_move_when_game_is_over(self, game_tuple:GameTuple):
+        game = game_tuple.game
+        presenter = game_tuple.presenter
+        game.end_game()
+        game.move(0,0)
+        assert presenter.the_error != None
+        
+
 class TestBoard:
 
     @pytest.fixture
@@ -71,6 +104,11 @@ class TestBoard:
         for i, row in enumerate(board._cells):
             for j, cell in enumerate(row):
                 assert cell.is_occupied == False
+
+    def test_make_move_occupies_cell(self, board:Board):
+        move = Move(Player('X'), 0, 0)
+        board.make_move(move)
+        assert board.at(0, 0).is_occupied == True
 
 class SpyBoard:
     pass
@@ -90,7 +128,7 @@ class TestCell:
         assert cell.is_occupied == False
 
     def test_cell_is_occupied_after_move(self, cell:Cell):
-        move = Move(Player("X"))
+        move = Move(Player("X"), 0, 0)
         cell.occupy(move)
         assert cell.is_occupied == True
 
